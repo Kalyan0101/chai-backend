@@ -22,11 +22,11 @@ const uploadOnCloudinary = async (localFileName) => {
         return response;
     }
     catch (error) {
+        fs.unlinkSync(localFileName);    // remove locally saved file
         return null;
     }
-    finally{
-        fs.unlinkSync(localFileName);    // remove locally saved file
-    }
+    // finally{
+    // }
 };
 
 export { uploadOnCloudinary }
