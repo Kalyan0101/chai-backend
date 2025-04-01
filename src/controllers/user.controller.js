@@ -5,65 +5,164 @@ import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 
 
-const registerUser = asyncHandler(async (req, res) => {
-    const { username, fullname, email, password } = req.body
+const generateAccessAndRefreshTokens = async (userId) => {
+    try {
+        const user = await User.findById(userId);
+        const accessToken = user.generateAccessToken();
+        const refreshToken = user.generateRefreshToken();
 
-    console.log(req.body);
-    console.log(req.files);   
+        user.refreshToken = refreshToken;
+        await user.save({ validateBeforeSave: false });
 
+        return {accessToken, refreshToken}
 
-    // if(fullname === ""){
-    //     throw new ApiError(400, "Fullname is required")
-    // }
+    } catch (error) {
+        throw new ApiError(500, "something went wrong while Refresh and Access token!!!")        
+    }
+}
+
+const registerUser = asyncHandler(async (req, res) => {    
+
+    const { userName, fullName, email, password } = req.body
 
     if(
-        [username, email, fullname, password].some((field) => field?.trim() === "")
+        [userName, email, fullName, password].some((field) => field?.trim() === "")
     ){
         throw new ApiError(400, "All fields are required")
     }
 
-    const existedUser = User.findOne({
-      $or: [ { username }, { email } ]
+    const existedUser = await User.findOne({
+      $or: [ { userName }, { email } ]
     });
-    if(existedUser) throw new ApiError(409, "User with email or username already exists!" );
+
+    if(existedUser) throw new ApiError(409, "User with email or userName already exists!" );
 
     const avatarLocalPath = req.files?.avatar[0]?.path;
-    const coverImageLocalPath = req.files?.coverImage[0]?.path;
+    // const coverImageLocalPath = req.files?.coverImage[0]?.path;
 
+    //  checkingg for coverImage file
+    let coverImageLocalPath;
+    if(req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length > 0){
+        coverImageLocalPath = req.files.coverImage[0].path;
+    }
+
+    //  check if avatarImage file is present, ortherwise throw error
     if(!avatarLocalPath) throw new ApiError(400, "Avatar file is required!");
     
+    // upload images to cloudinary
     const avatar = await uploadOnCloudinary(avatarLocalPath);
-    const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+    const coverImage = coverImageLocalPath ? await uploadOnCloudinary(coverImageLocalPath) : "";
 
+    // check if avatar file is successfully uploaded or not
     if(!avatar) throw new ApiError(400, "Avatar file is required!");
 
     const user = await User.create({
-        fullname,
+        fullName,
         avatar: avatar.url,
         coverImage: coverImage?.url || "",
         email,
         password,
-        username: username.toLowerCase()
+        userName: userName?.toLowerCase()
     })
 
     const createdUser = await User.findById(user._id).select(
         "-password -refreshToken"
     )
 
-    if(!createdUser) throw new ApiError(500, "Comething went Wrong while registering the user!")
+    if(!createdUser) throw new ApiError(500, "Something went Wrong while registering the user!")
 
     return res.status(201).json(
         new ApiResponse(200, createdUser, "User Register Successfully.")
     ) 
 })
 
+const loginUser = asyncHandler(async (req, res) => {
 
-export { registerUser }
+    // extract data from req body
+    const { email, userName, password } = req.body
+
+    // check if email and userName both are present or not
+    if(!userName || !email) throw new ApiError(400, "username or email is required!");
+
+    // find if user is exists with provided userName or email
+    const user = await User.findOne({ 
+        $or: [{ userName }, { email }]
+    })
+
+    // throw error if user not found
+    if(!user) throw new ApiError(404, "User does not  exists!");
+    
+    // user found now check provided password is valid or not
+    const isPasswordValid = await user.isPasswordCorrect(password);
+    
+    // throw error if password not valid
+    if(!isPasswordValid) throw new ApiError(401, "Invalid user credentials!")
+    
+    // generate access and refresh token to login the user
+    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id);
+    
+    // extra DB call to update the user object with freshly added access and refresh tokens
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+
+    // define options for securely manage cookies
+    const options = {
+        httpOnly: true,
+        secure: true
+    }
+
+    // return response and also set the secure cookies to the browser
+    return res.status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(
+        new ApiResponse(
+            200, 
+            {
+                user: loggedInUser, accessToken, refreshToken
+            },
+            "User logged In Successfully."
+        )
+    )
+});
+
+const logoutUser = asyncHandler( async (req, res) => {
+
+    // updating user object in DB, auth middleware provideing the "user" object
+    await User.findByIdAndUpdate(
+        req.user._id, 
+        {
+            $set: {
+                refreshToken: undefined
+            }
+        },
+        {
+            // it ensure the newly crafted object get passed if required
+            new: true
+        }
+    )
+
+    // same as login user but it clear the secure cookies
+    const options = {
+        httpOnly: true,
+        secure: true
+    }
+    return res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", refreshToken, options)
+    .json(new ApiResponse(200, {}, "User logged Out"));    
+})
+
+export { 
+    registerUser, 
+    loginUser,
+    logoutUser, 
+}
 
 /*
     1. get user details from frontend
     2. validate user data
-    3. check if user alredy exists: username, email
+    3. check if user alredy exists: userName, email
     4. check for images, check for avatar
     5. upload them to cloudinary, avatar
         - unlink / delete file from local storage
@@ -71,4 +170,14 @@ export { registerUser }
     7. remove password and refresh token field from response
     8. check for user creation
     9. return response
+*/
+
+/*
+    req body -> data > username, password
+    username, email
+    find the user
+    check password
+    generate access and refresh token
+    refresh token saved into database
+    send cookie
 */

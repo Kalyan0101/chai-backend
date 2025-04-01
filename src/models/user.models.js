@@ -46,11 +46,10 @@ const userSchema = new mongoose.Schema({
     }
 }, { timestamps: true })
 
-userSchema.pre("save", async function (next) {
+userSchema.pre("save", async function (next) {    
 
-    if(!this.isModified("passsword")){
-        return next();
-    }
+    // check if the password file is modified, it prevent unnecessarily hashing the password value every time while the model update.
+    if(!this.isModified("password")) return next();
 
     this.password = await bcrypt.hash(this.password, 10)
     next();
@@ -79,9 +78,6 @@ userSchema.method.generateRefreshToken = function(){
     return jwt.sign(
         {
         _id: this._id,
-        email: this.email,
-        userName: this.userName,
-        fullName: this.fullName
     },
     process.env.REFRESH_TOKEN_SECRET,
     {

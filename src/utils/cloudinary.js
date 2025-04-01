@@ -9,6 +9,7 @@ cloudinary.config({
 });
 
 const uploadOnCloudinary = async (localFileName) => {
+    
     try {
         if (!localFileName) return null;
 
@@ -18,15 +19,15 @@ const uploadOnCloudinary = async (localFileName) => {
         });
 
         // file has been uploaded successfully
-        console.log("file is uploaded on cloudinary", response);
+        console.log("file is uploaded on cloudinary");
         return response;
     }
     catch (error) {
-        fs.unlinkSync(localFileName);    // remove locally saved file
         return null;
     }
-    // finally{
-    // }
+    finally{
+        fs.unlinkSync(localFileName);    // remove locally saved file
+    }
 };
 
 export { uploadOnCloudinary }
