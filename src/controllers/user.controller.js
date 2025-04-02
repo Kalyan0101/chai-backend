@@ -158,18 +158,26 @@ const logoutUser = asyncHandler( async (req, res) => {
     .json(new ApiResponse(200, {}, "User logged Out"));    
 })
 
+// refresh token endpoint
 const refreshAccessToken = asyncHandler(async (req, res) => {
+
+    // collect refresh token from cookies or body
     const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
 
+    //  throw error if refresh token not available
     if(!refreshAccessToken) throw new ApiError(401, "Unauthorised request!!!")
 
     try {
+        //  decode the refresh token
         const decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET);
     
+        //  find that particular user based on id extract from refresh token
         const user = await User.findById(decodedToken?._id);
     
+        // throw error if user not found
         if(!user) throw new  ApiError(401, "Invalid Refresh Token!!!");
     
+        // compare collected Refresh Token with the saved one on DB, throw error if not matched
         if(user?.refreshToken !== incomingRefreshToken) throw new ApiError(401, "Refresh Token is expair or used!!!");
     
         const options = {
@@ -177,8 +185,10 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
             secure: true
         }
     
-        const { accessToken, newRefreshToken } = await generateAccessAndRefreshTokens(user?._id)
+        // generate new refresh and access token for the user
+        const { accessToken, newRefreshToken } = await generateAccessAndRefreshTokens(user?._id);
     
+        // crafted response
         return res
         .status(200)
         .cookie("accessToken", accessToken, options)
