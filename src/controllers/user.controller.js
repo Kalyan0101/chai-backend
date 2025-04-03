@@ -26,7 +26,7 @@ const generateAccessAndRefreshTokens = async (userId) => {
 
 const registerUser = asyncHandler(async (req, res) => {    
 
-    const { userName, fullName, email, password } = req.body
+    const { userName, fullName, email, password } = req.body;
 
     if(
         [userName, email, fullName, password].some((field) => field?.trim() === "")
@@ -82,7 +82,7 @@ const registerUser = asyncHandler(async (req, res) => {
 const loginUser = asyncHandler(async (req, res) => {
 
     // extract data from req body
-    const { email, userName, password } = req.body    
+    const { email, userName, password } = req.body;    
 
     // check if email and userName both are present or not
     if(!userName && !email) throw new ApiError(400, "username or email is required!");
@@ -158,7 +158,7 @@ const logoutUser = asyncHandler( async (req, res) => {
     .json(new ApiResponse(200, {}, "User logged Out"));    
 })
 
-// refresh token endpoint
+// refresh token end-point
 const refreshAccessToken = asyncHandler(async (req, res) => {
 
     // collect refresh token from cookies or body
@@ -206,26 +206,43 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     }
 })
 
+// change current password end-point
 const changeCurrentPassword = asyncHandler(async (req, res) => {
     
+    // extract required data from request body
     const { oldPassword, newPassword } = req.body;
 
+    if(!(oldPassword || newPassword)) throw new ApiError(400, "Old and New both password are required!");
+
+    // fetch user object from DB 
     const user = await User.findById(req.user?._id);
 
-    const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
+    // then check the old password is correct or not
+    const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);    
 
+    // throw error if the old password is not correct
     if(!isPasswordCorrect) throw new ApiError(400, "Invalid old password!!!")
 
+    // if the old password found correct then initiate the password changing process
     user.password = newPassword;
 
+    // and save it to DB with others validations make false
     await user.save({ validateBeforeSave: false })
 
     return res
     .status(200)
-    .json(new ApiResponse(200, {}, "Password changed successfully."));
+    .json(new ApiResponse(
+        200, 
+        {}, 
+        "Password changed successfully."
+    ));
 })
 
+// get current user end-point
 const getCurrentUser = asyncHandler(async (req, res) => {
+
+    // with the help of middleware extract the user data object from request body and send it to the user
+
     return res
     .status(200)
     .json(new ApiResponse(
@@ -235,12 +252,16 @@ const getCurrentUser = asyncHandler(async (req, res) => {
      ));
 })
 
+// update account details end-point
 const updateAccountDetails = asyncHandler(async ( req, res) => {
-    const { fullName, email } = req.body;
 
-    if(!fullName && !email) throw new ApiError(400, "All fields are required");
+    const { fullName, email } = req.body;    
 
-    const user = User.findByIdAndUpdate(
+    // throw error if fullname and email both are not present NOTE: this code changes both fullname and email
+    if( !(fullName && email) ) throw new ApiError(400, "All fields are required");
+
+    // find user and set new parameters and also remove the password field from response
+    const user = await User.findByIdAndUpdate(
         req.user?._id,
         {
             $set: {
@@ -253,19 +274,25 @@ const updateAccountDetails = asyncHandler(async ( req, res) => {
 
     return res
     .status(200)
-    .json(new ApiError(200, user, "Account details updated successfully"));
+    .json(new ApiResponse(200, user, "Account details updated successfully"));
 })
 
+// update user avatar file(image) end-point
 const updateUserAvatar = asyncHandler(async (req, res) => {
 
+    // NOTE: use multer for file handeling, save the file in the local storage using multer
+    
+    // extract the file path from request body
     const avatarLocalPath = req.file?.path
 
     if(!avatarLocalPath) throw new ApiError(400, "Error: Avatar file is missing!!!");
 
+    // first upload the file to cloudinary
     const avatar = await uploadOnCloudinary(avatarLocalPath)
 
     if(!avatar.url) throw new ApiError(400, "Error: while uploading avatar!!!")
     
+    // find the user and set the new file url
     const user = await User.findByIdAndUpdate(
         req.user?._id,
         {
@@ -276,6 +303,8 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
         { new: true }
     ).select("-password");
 
+    // TODO: need to delete the old file from cloudinary
+
     return res
     .status(200)
     .json(new ApiResponse(
@@ -285,6 +314,7 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     ));
 })
 
+// update cover image file end-point
 const updateUserCoverImage = asyncHandler(async (req, res) => {
 
     const coverImageLocalPath = req.file?.path
