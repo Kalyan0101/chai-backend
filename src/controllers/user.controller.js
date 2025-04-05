@@ -4,6 +4,7 @@ import { User } from "../models/user.models.js"
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 
 
 const generateAccessAndRefreshTokens = async (userId) => {
@@ -350,12 +351,16 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
 
     if(!userName?.trim()) throw new ApiError(400, "usernmae is missing");
 
+    // aggregate pipeline of mongoDB
     const channel = await User.aggregate([
+        // first matched the unique one
         {
             $match: {
                 userName: userName?.toLowerCase()
             }
         },
+        // then join this data with "subscriptions" model data 
+        // and extract "subscribers"
         {
             $lookup: {
                 from: "subscriptions",
@@ -364,6 +369,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
                 as: "subscribers"
             }
         },
+        // do the same and extract the "subscribedTo"
         {
             $lookup: {
                 from: "subscriptions",
@@ -372,10 +378,11 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
                 as: "subscribedTo"
             }
         },
+        // now add all of these data together
         {
             $addFields: {
                 subscribersCount: {
-                    $size: "$subscribers"
+                    $size: "$subscribers"   // count all objects
                 },
                 channelsSubscribedToCount: {
                     $size: "$subscribedTo"
@@ -389,6 +396,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
                 }
             }
         },
+        // at the end, select all those fields which are required to send to user
         {
             $project: {
                 fullName: 1,
@@ -418,6 +426,60 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     
 })
 
+const getWatchedHistory = asyncHandler(async (req, res) => {
+    const user = await User.aggregate([
+        {
+            $match: {
+                _id: new mongoose.Types.ObjectId(req.user?._id)
+            }
+        },
+        {
+            $lookup: {
+                from: "videos",
+                localField: "watchHistory",
+                foreignField: "_id",
+                as: "watchHistory",
+                pipeline: [
+                    {
+                        $lookup: {
+                            from: "users",
+                            localField: "owner",
+                            foreignField: "_id",
+                            as: "owner",
+                            pipeline: [
+                                {
+                                    $project: {
+                                        fullName: 1,
+                                        userName: 1,
+                                        avatar: 1
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        $addFields: {
+                            owner: {
+                                $first: "$owner"
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    ])
+
+    console.log(user);    
+
+    return res
+    .status(200)
+    .json(new ApiResponse(
+        200, 
+        user[0].getWatchedHistory, 
+        "watch history fatched successfully."
+    ))
+})
+
 export { 
     registerUser, 
     loginUser,
@@ -428,7 +490,8 @@ export {
     updateAccountDetails,
     updateUserAvatar,
     updateUserCoverImage,
-    getUserChannelProfile
+    getUserChannelProfile,
+    getWatchedHistory
 }
 
 /*
