@@ -433,8 +433,6 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
         }
     ])
 
-    console.log(channel);
-
     if(!channel?.length) throw new ApiError(404, "Channel does not exists!");
 
     return res
@@ -477,7 +475,7 @@ const getWatchedHistory = asyncHandler(async (req, res) => {
                             as: "owner",
                             pipeline: [
                                 {
-                                    // return only selected fields
+                                    // return only mentioned fields
                                     $project: {
                                         fullName: 1,
                                         userName: 1,

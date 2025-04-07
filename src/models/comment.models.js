@@ -1,10 +1,10 @@
-import mongoose, { model } from "mongoose";
+import mongoose from "mongoose";
 import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 
 
 const commentSchema = new mongoose.Schema({
     
-    comtent: {
+    content: {
         type: String,
         require: true,
     },
