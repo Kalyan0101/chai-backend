@@ -60,10 +60,19 @@ const registerUser = asyncHandler(async (req, res) => {
     // check if avatar file is successfully uploaded or not
     if(!avatar) throw new ApiError(400, "Avatar file is required!");
 
+    const updateAvatar = {
+        url: avatar?.url || "",
+        public_id: avatar?.public_id || ""
+    }
+    const updateCoverImage = {
+        url: coverImage?.url || "",
+        public_id: coverImage?.public_id || ""
+    }
+
     const user = await User.create({
         fullName,
-        avatar: avatar,
-        coverImage: coverImage || "",
+        avatar: updateAvatar,
+        coverImage: updateCoverImage,
         email,
         password,
         userName: userName?.toLowerCase()
@@ -137,8 +146,8 @@ const logoutUser = asyncHandler( async (req, res) => {
     await User.findByIdAndUpdate(
         req.user._id, 
         {
-            $set: {
-                refreshToken: undefined
+            $unset: {
+                refreshToken: 1
             }
         },
         {
@@ -294,13 +303,18 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     // delete old image    
     const isOldAvatarRemove = await deleteFromCloudinary(req.user.avatar?.public_id);
     if(!isOldAvatarRemove) throw new ApiError(400, "Error: while removing old avatar!!!");
+
+    const updateAvatar = {
+        url: avatar?.url || "",
+        public_id: avatar?.public_id || ""
+    }
     
     // find the user and set the new file url
     const user = await User.findByIdAndUpdate(
         req.user?._id,
         {
             $set: {
-                avatar: avatar
+                avatar: updateAvatar
             }
         },
         { new: true }
@@ -326,12 +340,17 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
 
     const isOldCoverImageRemove = await deleteFromCloudinary(req.user.coverImage?.public_id);
     if(!isOldCoverImageRemove) throw new ApiError(400, "Error: while removing old avatar!!!");
+
+    const updateCoverImage = {
+        url: coverImage?.url || "",
+        public_id: coverImage?.public_id || ""
+    }
     
     const user = await User.findByIdAndUpdate(
         req.user?._id,
         {
             $set: {
-                coverImage: coverImage
+                coverImage: updateCoverImage
             }
         },
         { new: true }
@@ -487,7 +506,7 @@ const getWatchedHistory = asyncHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(
         200, 
-        user[0].getWatchedHistory, 
+        user[0].watchHistory,
         "watch history fatched successfully."
     ))
 })
