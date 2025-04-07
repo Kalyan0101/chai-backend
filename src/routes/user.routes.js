@@ -2,6 +2,8 @@ import { Router } from "express";
 import {
     changeCurrentPassword,
     getCurrentUser,
+    getUserChannelProfile,
+    getWatchedHistory,
     loginUser,
     logoutUser,
     refreshAccessToken,
@@ -35,18 +37,22 @@ router.route("/login").post(loginUser);
 router.route("/logout").post(verifyJWT, logoutUser);
 router.route("/refreshToken").post(refreshAccessToken);
 router.route("/change-password").post(verifyJWT, changeCurrentPassword);
-router.route("/get-user").post(verifyJWT, getCurrentUser);
-
+router.route("/current-user").get(verifyJWT, getCurrentUser);
 router
-    .route("/update-details")
-    .post(upload.none(), verifyJWT, updateAccountDetails); 
+    .route("/update-account")
+    .patch(upload.none(), verifyJWT, updateAccountDetails); 
     // NOTE: if want to send data as form-data by postman we have to use any middleware(multer or body-parser) othwise use raw format
 
 router
     .route("/update-avatar")
-    .post(upload.single("avatar"), verifyJWT, updateUserAvatar);
+    .patch(verifyJWT, upload.single("avatar"), updateUserAvatar);
 
 router
     .route("/update-cover-image")
-    .post(upload.single("coverImage"), verifyJWT, updateUserCoverImage);
+    .patch(verifyJWT, upload.single("coverImage"), updateUserCoverImage);
+
+router.route("/profile/:userName").get(verifyJWT, getUserChannelProfile)
+
+router.route("/watchHistory").get(verifyJWT, getWatchedHistory)
+
 export default router;

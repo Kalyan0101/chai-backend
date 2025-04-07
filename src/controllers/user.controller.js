@@ -1,7 +1,7 @@
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { User } from "../models/user.models.js"
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import { deleteFromCloudinary, uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
@@ -62,8 +62,8 @@ const registerUser = asyncHandler(async (req, res) => {
 
     const user = await User.create({
         fullName,
-        avatar: avatar.url,
-        coverImage: coverImage?.url || "",
+        avatar: avatar,
+        coverImage: coverImage || "",
         email,
         password,
         userName: userName?.toLowerCase()
@@ -284,27 +284,27 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     // NOTE: use multer for file handeling, save the file in the local storage using multer
     
     // extract the file path from request body
-    const avatarLocalPath = req.file?.path
-
+    const avatarLocalPath = req.file?.path;
     if(!avatarLocalPath) throw new ApiError(400, "Error: Avatar file is missing!!!");
 
     // first upload the file to cloudinary
-    const avatar = await uploadOnCloudinary(avatarLocalPath)
+    const avatar = await uploadOnCloudinary(avatarLocalPath);
+    if(!avatar.url) throw new ApiError(400, "Error: while uploading avatar!!!");
 
-    if(!avatar.url) throw new ApiError(400, "Error: while uploading avatar!!!")
+    // delete old image    
+    const isOldAvatarRemove = await deleteFromCloudinary(req.user.avatar?.public_id);
+    if(!isOldAvatarRemove) throw new ApiError(400, "Error: while removing old avatar!!!");
     
     // find the user and set the new file url
     const user = await User.findByIdAndUpdate(
         req.user?._id,
         {
             $set: {
-                avatar: avatar.url
+                avatar: avatar
             }
         },
         { new: true }
     ).select("-password");
-
-    // TODO: need to delete the old file from cloudinary
 
     return res
     .status(200)
@@ -318,19 +318,20 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
 // update cover image file end-point
 const updateUserCoverImage = asyncHandler(async (req, res) => {
 
-    const coverImageLocalPath = req.file?.path
-
+    const coverImageLocalPath = req.file?.path;
     if(!coverImageLocalPath) throw new ApiError(400, "Error: cover image file is missing!!!");
 
-    const coverImage = await uploadOnCloudinary(coverImageLocalPath)
+    const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+    if(!coverImage.url) throw new ApiError(400, "Error: while uploading cover image!!!");
 
-    if(!coverImage.url) throw new ApiError(400, "Error: while uploading cover image!!!")
+    const isOldCoverImageRemove = await deleteFromCloudinary(req.user.coverImage?.public_id);
+    if(!isOldCoverImageRemove) throw new ApiError(400, "Error: while removing old avatar!!!");
     
     const user = await User.findByIdAndUpdate(
         req.user?._id,
         {
             $set: {
-                coverImage: coverImage.url
+                coverImage: coverImage
             }
         },
         { new: true }
@@ -345,13 +346,15 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
     ));
 })
 
+// get user channel profile endpoint
 const getUserChannelProfile = asyncHandler(async (req, res) => {
 
+    // extract username from url parameter
     const { userName } = req.params
 
-    if(!userName?.trim()) throw new ApiError(400, "usernmae is missing");
+    if(!userName?.trim()) throw new ApiError(400, "userName is missing");
 
-    // aggregate pipeline of mongoDB
+    // start aggregate pipeline of mongoDB
     const channel = await User.aggregate([
         // first matched the unique one
         {
@@ -409,7 +412,6 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
                 email: 1
             }
         }
-
     ])
 
     console.log(channel);
@@ -426,21 +428,29 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     
 })
 
+//  get user watch history endpoint
 const getWatchedHistory = asyncHandler(async (req, res) => {
+
+    // start aggregation pipeline
     const user = await User.aggregate([
         {
+            // matched and find the object
             $match: {
                 _id: new mongoose.Types.ObjectId(req.user?._id)
             }
         },
         {
+            // join models
             $lookup: {
                 from: "videos",
                 localField: "watchHistory",
                 foreignField: "_id",
                 as: "watchHistory",
+                
+                // nested pipeline
                 pipeline: [
                     {
+                        // nested join for get another level of data
                         $lookup: {
                             from: "users",
                             localField: "owner",
@@ -448,6 +458,7 @@ const getWatchedHistory = asyncHandler(async (req, res) => {
                             as: "owner",
                             pipeline: [
                                 {
+                                    // return only selected fields
                                     $project: {
                                         fullName: 1,
                                         userName: 1,
@@ -458,6 +469,7 @@ const getWatchedHistory = asyncHandler(async (req, res) => {
                         }
                     },
                     {
+                        // extract data from array and return it
                         $addFields: {
                             owner: {
                                 $first: "$owner"

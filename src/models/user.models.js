@@ -25,11 +25,11 @@ const userSchema = new mongoose.Schema({
         index: true
     },
     avatar:{
-        type: String,
+        type: Object,
         required: true,
     },
     coverImage:{
-        type: String,
+        type: Object,
     },
     watchHistory:[
         {
