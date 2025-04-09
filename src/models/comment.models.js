@@ -6,7 +6,7 @@ const commentSchema = new mongoose.Schema({
     
     content: {
         type: String,
-        require: true,
+        required: true,
     },
     video: {
         type: mongoose.Schema.Types.ObjectId,
@@ -17,7 +17,7 @@ const commentSchema = new mongoose.Schema({
         ref: "User"
     }
 
-}, {timeseries: true})
+}, {timestamps: true})
 
 commentSchema.plugin(mongooseAggregatePaginate)
 
